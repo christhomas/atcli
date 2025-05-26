@@ -4,6 +4,10 @@
 
 atcli is a modern CLI tool written in Go for interacting with AT command–based cellular and GPS/GNSS modems. It aims to replace traditional tools like minicom and screen with a purpose-built, interruption-free, and modern interface designed for today's development workflows.
 
+## 📸 Screenshot
+
+![atcli screenshot](./screenshot.png)
+
 ## 🤔 Why atcli?
 
 Traditional terminal-based modem interfaces like minicom were designed decades ago and lack many features that modern developers expect:
@@ -111,11 +115,6 @@ atcli opens a modern two-panel terminal interface:
 - The argument --version will print the version of the app.
 - The argument --port will set the serial port to use. E.g. `--port /dev/serial0`
 - The argument --baud will set the baud rate to use. E.g. `--baud 115200`
-
-Below is a screenshot of the interface:
-
-![atcli screenshot](./screenshot.png)
-
 
 ⸻
 
