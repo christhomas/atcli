@@ -68,7 +68,7 @@ func main() {
 	logView := views.NewLogView(app, eventBus)
 	viewManager.Register(logView)
 
-	statusBar := views.NewStatusBar()
+	statusBar := views.NewStatusBar(eventBus)
 	viewManager.Register(statusBar)
 	statusBar.SetPortName(*portName)
 	statusBar.SetBaudRate(*baudRate)

@@ -16,6 +16,18 @@ type Command struct {
 	Run         func(args []string) error
 }
 
+// ATCommandPayload is used for sending AT commands via the event bus with flow lock ownership.
+type ATCommandPayload struct {
+	Command string
+	OwnerID string
+}
+
+// ATFlowStep represents a single step in a multi-step AT command flow.
+type ATFlowStep struct {
+	Command           string
+	ExpectedResponses []string // All must be received before next step
+}
+
 type HistoryItem struct {
 	Cmd   string
 	Index int // Line index in the commands view
@@ -46,7 +58,8 @@ const (
 	EventAppShutdown     EventType = "app_shutdown"
 	EventFocusInput      EventType = "focus_input"
 	EventCommandSent     EventType = "command_sent"
-	EventATModemCommand  EventType = "command_atmodem_sent"
+	EventATModemCommand  EventType = "atmodem_command"
+	EventATModemFlow     EventType = "atmodem_flow"
 	EventCommandHistory  EventType = "command_history"
 	EventInputSetCommand EventType = "input_set_command"
 	EventReplyReceived   EventType = "reply_received"
@@ -61,6 +74,7 @@ const (
 	EventStartSignal     EventType = "start_signal"
 	EventStopGPS         EventType = "stop_gps"
 	EventStartGPS        EventType = "start_gps"
+	EventUpdateTime      EventType = "update_time"
 )
 
 // Event represents an event in the system

@@ -79,7 +79,7 @@ func (r *ReplyView) SerialError(event types.Event) {
 func (r *ReplyView) SerialResponse(event types.Event) {
 	clean := strings.TrimRight(event.Payload.(string), "\r\n")
 	if clean != "" {
-		r.Append("[" + fmt.Sprint(r.replyLineNum) + "] " + clean + "\n")
+		r.Append("[" + fmt.Sprint(r.replyLineNum) + "] <- " + clean + "\n")
 	}
 }
 

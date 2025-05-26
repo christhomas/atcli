@@ -50,6 +50,7 @@ func (l *LogView) handleLogMessage(event types.Event) {
 		current := l.view.GetText(false) // Get current text without tags
 		newText := current + message + "\n"
 		l.view.SetText(newText)
+		l.view.ScrollToEnd()
 	}
 }
 

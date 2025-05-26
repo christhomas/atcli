@@ -23,6 +23,8 @@ type GPSView struct {
 	altitude    float64
 	satellites  int
 	lastUpdated time.Time
+	utcTime     string // Store the last parsed UTC time from GPS
+	date        string // Store the last parsed date (YYYYMMDD)
 }
 
 func NewGPSView(title string, app *tview.Application, eventBus *services.EventBus) *GPSView {
@@ -111,6 +113,7 @@ func (g *GPSView) handleModemResponse(event types.Event) {
 
 		// Check if this is a GPS response
 		if strings.Contains(response, "+CGPSINFO:") {
+			services.LogMessage(response)
 			g.parseGPSResponse(response)
 		}
 	}
@@ -151,20 +154,40 @@ func (g *GPSView) parseGPSResponse(response string) {
 			}
 			g.longitude = lon
 		}
-
-		// Parse altitude
-		if matches[7] != "" {
-			alt, err := strconv.ParseFloat(matches[7], 64)
-			if err == nil {
-				g.altitude = alt
-			}
+		// Parse date (format: DDMMYY)
+		dateStr := matches[5]
+		if len(dateStr) == 6 {
+			g.date = fmt.Sprintf("%s-%s-%s", dateStr[0:2], dateStr[2:4], dateStr[4:6])
+		} else {
+			g.date = "N/A"
 		}
 
-		// Update timestamp
-		g.lastUpdated = time.Now()
+		// Parse UTC time (format: hhmmss.ss as float)
+		utcTimeStr := matches[6]
+		utcTimeFloat, err := strconv.ParseFloat(utcTimeStr, 64)
+		var utcTimeFormatted string
+		if err == nil {
+			utcInt := int(utcTimeFloat)
+			hh := utcInt / 10000
+			mm := (utcInt / 100) % 100
+			ss := utcInt % 100
+			utcTimeFormatted = fmt.Sprintf("%02d:%02d:%02d UTC", hh, mm, ss)
+		} else {
+			utcTimeFormatted = "N/A"
+		}
+		g.utcTime = utcTimeFormatted
 
-		// Update display
+		// Parse altitude (meters)
+		altStr := matches[7]
+		alt, err := strconv.ParseFloat(altStr, 64)
+		if err == nil {
+			g.altitude = alt
+		}
+
+		g.lastUpdated = time.Now()
 		g.updateGPSDisplay(true)
+	} else {
+		g.updateGPSDisplay(false)
 	}
 }
 
@@ -258,7 +281,15 @@ func (g *GPSView) updateGPSDisplay(hasData bool) {
 		timeInfo := fmt.Sprintf("\n\nLast updated: %s", timestamp)
 
 		// Combine all information
-		displayText = decimalFormat + "\n" + dmsFormat + altitudeInfo + mapsLink + timeInfo
+		utcInfo := ""
+		if g.utcTime != "" {
+			utcInfo = fmt.Sprintf("\n\n[green]GPS UTC Time:[white] %s", g.utcTime)
+		}
+		dateInfo := ""
+		if g.date != "" {
+			dateInfo = fmt.Sprintf("\n[green]GPS Date:[white] %s", g.date)
+		}
+		displayText = decimalFormat + "\n" + dmsFormat + altitudeInfo + mapsLink + utcInfo + dateInfo + timeInfo
 	}
 
 	// Update the text view
@@ -268,6 +299,18 @@ func (g *GPSView) updateGPSDisplay(hasData bool) {
 	g.eventBus.Publish(types.Event{
 		Type: types.EventGPSUpdated,
 	})
+
+	// Emit EventUpdateTime for status bar with UTC time, date, and last update
+	if g.utcTime != "" && g.utcTime != "N/A" {
+		g.eventBus.Publish(types.Event{
+			Type: types.EventUpdateTime,
+			Payload: map[string]interface{}{
+				"utc":         g.utcTime,
+				"date":        g.date,
+				"lastUpdated": g.lastUpdated,
+			},
+		})
+	}
 }
 
 func (g *GPSView) GetName() string {
@@ -276,15 +319,6 @@ func (g *GPSView) GetName() string {
 
 func (g *GPSView) GetComponent() tview.Primitive {
 	return g.gpsView
-}
-
-// Stop stops the GPS monitoring
-func (g *GPSView) Stop() {
-	if !g.stopped {
-		g.stopped = true
-		// Update the view to indicate monitoring is stopped
-		g.gpsView.SetText("[yellow]GPS monitoring stopped[white]\n\nUse /gps to restart monitoring")
-	}
 }
 
 // handleStopGPS handles the stop GPS event
@@ -299,12 +333,44 @@ func (g *GPSView) handleStartGPS(event types.Event) {
 
 // Start starts the GPS monitoring
 func (g *GPSView) Start() {
+	// GPS initialization flow
+	initFlow := []types.ATFlowStep{
+		{Command: "AT+CGNSSPWR=0", ExpectedResponses: []string{"OK"}},
+		{Command: "AT+CGNSSPWR=1", ExpectedResponses: []string{"OK", "+CGNSSPWR: READY!"}},
+		{Command: "AT+CGNSSTST=1", ExpectedResponses: []string{"OK"}},
+		{Command: "AT+CGNSSPORTSWITCH=0,1", ExpectedResponses: []string{"OK"}},
+	}
+	g.eventBus.Publish(types.Event{
+		Type:    types.EventATModemFlow,
+		Payload: initFlow,
+	})
+
 	if g.stopped {
 		g.stopped = false
 		// Set initial content
-		g.gpsView.SetText("[yellow]Initializing GPS monitor...[white]\n\nWaiting for first GPS reading...")
-		// Start the GPS monitoring loop
-		go g.monitorGPS()
+		g.gpsView.SetText("[yellow]GPS monitoring active[white]\n\nWaiting for GPS data...")
+	}
+	// Start the GPS monitoring loop
+	go g.monitorGPS()
+}
+
+// Stop stops the GPS monitoring
+func (g *GPSView) Stop() {
+	// GPS stop flow
+	stopFlow := []types.ATFlowStep{
+		{Command: "AT+CGNSSTST=0", ExpectedResponses: []string{"OK"}},
+		{Command: "AT+CGNSSPORTSWITCH=0,0", ExpectedResponses: []string{"OK"}},
+		{Command: "AT+CGNSSPWR=0", ExpectedResponses: []string{"OK"}},
+	}
+	g.eventBus.Publish(types.Event{
+		Type:    types.EventATModemFlow,
+		Payload: stopFlow,
+	})
+
+	if !g.stopped {
+		g.stopped = true
+		// Update the view to indicate monitoring is stopped
+		g.gpsView.SetText("[yellow]GPS monitoring stopped[white]\n\nUse /gps to restart monitoring")
 	}
 }
 
