@@ -130,3 +130,241 @@ Below is a screenshot of the interface:
 Normally, I run `make build arm64 linux` to build the binary for my device. Then I run `./build/atcli-linux-arm64` to run the binary.
 
 I build the arm64 / darwin binary for my macbook and I can provide `/dev/ttys0` 
+
+## 📱 Use as a modem to get internet access
+
+**SIMCom A7670E PPP Setup Guide (pppd😉 over UART)**
+
+This guide explains how to configure and use `pppd` on a Linux system (e.g., Raspberry Pi) to establish a cellular data connection using a SIMCom A7670E module over UART.
+
+---
+
+#### 2. Files and Configuration
+
+##### /etc/ppp/peers/simcom
+
+```
+/dev/serial0 115200
+connect "/usr/sbin/chat -v -f /etc/ppp/chat-connect"
+noauth
+defaultroute
+usepeerdns
+persist
+nodetach
+```
+
+##### /etc/ppp/chat-connect
+
+```
+ABORT "BUSY"
+ABORT "NO CARRIER"
+ABORT "ERROR"
+ABORT "NO DIALTONE"
+TIMEOUT 10
+"" AT
+OK AT+CGDCONT=1,"IP","internet"
+OK ATD*99#
+CONNECT ""
+```
+
+> Replace `"internet"` with your carrier's APN if different.
+
+---
+
+#### 3. Start the Connection
+
+Run the following command to start the PPP session with verbose output:
+
+```bash
+sudo pppd call simcom nodetach debug dump logfd 2
+```
+
+This will:
+
+* Keep output in the terminal
+* Show detailed log information
+* Attempt to dial and bring up the PPP interface (e.g., `ppp0`)
+
+---
+
+#### 4. Troubleshooting
+
+##### Check interface:
+
+```bash
+ip a show ppp0
+```
+
+##### Test connectivity:
+
+```bash
+ping 8.8.8.8
+```
+
+##### DNS issues?
+
+If name resolution fails:
+
+* Check `/etc/resolv.conf`
+* If it is a symlink to systemd, replace it with:
+
+  ```bash
+  sudo rm /etc/resolv.conf
+  sudo cp /etc/ppp/resolv.conf /etc/resolv.conf
+  ```
+
+---
+
+#### 5. Notes
+
+* No SIM PIN is required for most IoT SIMs, but if your SIM is locked, unlock it using `AT+CPIN="1234"`
+* Ensure GNSS and PPP are powered separately; PPP does **not** require GNSS
+* The `persist` option causes automatic redialing if disconnected
+
+---
+
+## 📚 Interesting Inforamtion
+
+```
+Sending SMS using USB From Computer 
+Connect Modem to Computer using either on board USB Port or using External USB to Serial converter board.
+Open Serial port software and enter the below command to send SMS.
+ 
+AT<CR><LF> 
+Attention Command,  this signifies that our Modem is working properly. 
+Answer Expected : OK
+
+ATE0<CR><LF> 
+This Command is being sent to stop the echo.
+Answer Expected : OK
+
+AT+CREG?<CR><LF> 
+It is being used to check whether the SIM got registered with the Network.
+Answer Expected : +CREG: 0,1  or +CREG: 0,5
+
+AT+CMGF=1<CR><LF> 
+Configuring Text mode for sending SMS
+Answer Expected : OK
+
+AT+CMGS="Mobile Number"<CR><LF> 
+Set the destination mobile number enclosed in the DOUBLE QUOTES.
+Answer Expected : >
+
+"Hi, How are you?"<SUB>
+Here we enter our message body followed by CONTROL-Z (<SUB>) 
+Answer Expected : SMS confirmation starting with "+CMGS"
+```
+---
+
+```
+Reading SMS using Modem 
+AT<CR><LF> 
+Attention Command,  this signifies that our Modem is working properly. 
+Answer Expected : OK
+ATE0<CR><LF> 
+This Command is being sent to stop the echo.
+Answer Expected : OK
+AT+CREG?<CR><LF> 
+It is being used to check whether the SIM got registered with the Network.
+Answer Expected : +CREG: 0,1  or +CREG: 0,5
+AT+CMGF=1<CR><LF> 
+Configuring Text mode for SMS
+Answer Expected : OK
+AT+CNMI=2,1,0,0,0<CR><LF>
+Configure Modem to notify on incoming SMS reciept. Modem will inform the SMS reciept by "+CMTI:<Message index Number> "
+AT+CMGR=<Message index Number>
+Now Read SMS using <Message index Number> received.
+```
+
+---
+
+```
+How to get GPS Location using simcom A7672S 4G LTE Modem
+AT<CR><LF> 
+Attention Command,  this signifies that our Modem is working properly. 
+Answer Expected : OK
+AT_CGNSSPWR=1<CR><LF>
+should be executed to let GNSS module power on firstly and have to wait till getting the confirmation . may take 10-30Seconds.
+Answer Expected : "OK" and "+CGNSSPWR: READY!" afetr few seconds
+AT+CGPSCOLD<CR><LF> 
+COLD start GNSS, When first used;
+Answer Expected : OK
+AT+CGNSSTST=1<CR><LF> 
+Answer Expected : OK
+AT+AGPS<CR><LF> 
+Activating Assisted GPS function for better accuracy.
+Answer Expected : OK
+AT+CGPSINFO<CR><LF> 
+Get GPS fixed position information , After 1 minute , GPS location information will be recived .
+Answer Expected : OK
+```
+--- 
+
+```
+This will get you a NMEA stream from the modem
+
+AT+CGDRT=4,1
+AT+CGSETV=4,0
+AT+CGNSSPWR=1
+
+Waiting to return >  +CGNSSPWR: READY! 
+Next send
+
+AT+CGNSSMODE=3
+AT+CGNSSNMEA=1,1,1,1,1,1,0,0
+AT+CGPSNMEARATE=2
+AT+CGNSSTST=1
+AT+CGNSSPORTSWITCH=0,1
+```
+
+---
+
+```
+-> AT+CPSI?
+
++CPSI: LTE,Online,262-03,0x5607,5506356,266,EUTRAN-BAND1,300,5,5,30,55,52,21
+```
+
+---
+
+```
+-> AT+SIMCOMATI
+
+Manufacturer: SIMCOM INCORPORATED                                                                   
+Model: A7670E-MASA                                                                                   
+Revision: A131B02A7670M6C_M                                                                          
+A7670M6_B02V03_241108                                                                                
+IMEI: 863957072600361
+```
+
+---
+
+| Command      | Description  | Return                   |
+|--------------|--------------|-------------------------:|
+| AT           | AT Test Command | OK |
+| ATE          | ATE1 Set Up Echo | OK |
+| ATE0         | Turn off Echo | OK |
+| AT+SIMCOMATI | Query Module Information | OK |
+| AT+IPREX     | Setting the module hardware serial port baud rate | +IPREX: OK |
+| AT+CRESET    | Reset Module | OK |
+| AT+CSQ       | Network signal quality check, returning signal strength value | +CSQ: 25,99 OK |
+| AT+CPIN?     | Check SIM card status, returning 'READY,' indicating the SIM card is recognized and functioning properly | +CPIN: READY |
+| AT+COPS?     | Query the current network operator; upon successful connection, it will return information about the network | +COPS: OK |
+| AT+CREG?     | Query network registration status | +CREG: OK |
+| AT+CPSI?     | Query UE (User Equipment) system information | +CPSI: LTE,Online,262-03,0x5607,5506356,266,EUTRAN-BAND1,300,5,5,30,55,52,21 |
+| AT+CNMP      | Network mode selection command: <br>2: Automatic<br>13: GSM only<br>14: WCDMA only<br>38: LTE only | OK |
+
+---
+
+This waveshare page has an interesting page with a lot of information on it
+
+[text](https://www.waveshare.com/wiki/A7670E_Cat-1/GNSS_HAT)
+
+---
+
+The common commands for GNSS satellite positioning functionality are as follows:
+
+- AT+CGNSSPWR=1 // Activate GNSS
+- AT+CGNSSTST=1 // Enable information output
+- AT+CGNSSPORTSWITCH=0,1 // Switch NMEA data output port
+- AT+CGPSINFO // Retrieve satellite latitude and longitude data
